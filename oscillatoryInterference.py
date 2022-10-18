@@ -27,46 +27,50 @@ class DendriticOscillator(Oscillator):
         self.preferred_heading = preferred_heading
         self.B = B
         self.phase_offset = phase_offset
+        self.activity_derivative_history = []
 
     def check(self, 
               t, 
               previous_t, 
-              previous_heading, 
-              previous_speed,
               speed, 
               heading):
         delta_t = t - previous_t
         heading_factor = math.cos(heading - self.preferred_heading)
         angular_frequency = (self.theta_angular_frequency + 
                              (self.B * speed * heading_factor))
-        previous_activity = 0 
-        if len(self.activity_history) > 0:
+        previous_activity = 1 # On the zeroth run, activity starts at 1 (cosine)  
+        previous_derivative = 0
+        if len(self.activity_history) != 0:
             previous_activity = self.activity_history[-1]
-        previous_heading_factor = math.cos(previous_heading - self.preferred_heading)
-        previous_angular_frequency = (self.theta_angular_frequency + 
-                             (self.B * previous_speed * previous_heading_factor))
-        # Make sure this is correct...
-        offset = math.acos(previous_activity) / angular_frequency
-        previous_derivative = previous_angular_frequency * -1 * math.sin(previous_angular_frequency * previous_t)
-        # If the derivative is positive, adjust by adding pi / angular frequency
+            previous_derivative = self.activity_derivative_history[-1]
+        proto_offset = math.acos(previous_activity)
         if previous_derivative > 0: 
-            offset += (math.pi / angular_frequency)
+            proto_offset = -1 * proto_offset
+        offset = proto_offset / angular_frequency
         self.activity = math.cos(angular_frequency * (delta_t + offset))
-        self.activity_history.append(self.activity)
+        derivative = angular_frequency * -1 * math.sin(angular_frequency * (delta_t + offset))
+        self.activity_history.append(self.activity)   
+        self.activity_derivative_history.append(derivative)
+        """
+        debug_data = {
+            'A. F.': angular_frequency,
+            'Proto offset': proto_offset,
+            'Prev. derivative': previous_derivative, 
+            'Derivative': derivative,
+            'Offset': offset,
+            'Prev. Activity': previous_activity,
+            'Activity': self.activity
+        }
+        print(debug_data)
+        """
         return self.activity
-
-"""
-1. Find out where the somatic cosine wave and the speed/heading-adjusted cosine wave align (function value and sign of derivative)
-2. Shift the s/h-adjusted wave so that it starts at this point
-3. Get the value of this shifted wave at delta_t; this value is the new activity. 
-"""
 
 class GridCell:
     def __init__(self, 
                  n_dendritic, 
                  theta_angular_frequency, 
                  B, 
-                 preferred_headings=None, 
+                 preferred_headings=None, # IN RADIANS
                  phase_offsets = None):
         self.firing_history = []
         self.soma = Oscillator(theta_angular_frequency)
@@ -75,7 +79,7 @@ class GridCell:
             # Default offset between preferred directions corresponds to even spacing
             preferred_heading = None
             if preferred_headings == None: 
-                preferred_heading = n * 2 * math.pi / n_dendritic # Check
+                preferred_heading = n * 2 * math.pi / n_dendritic
             else: 
                 preferred_heading = preferred_headings[n]
             phase_offset = 0
@@ -102,14 +106,8 @@ class GridCell:
             somatic_activity = self.soma.check(t)
             dendritic_activity = []
             for n in range(len(self.dendrites)): 
-                previous_speed, previous_heading = 0, 0
-                if len(self.firing_history) != 0:
-                    previous_heading = path[step - 1][1]
-                    previous_speed = path[step - 1][2]
                 activity = self.dendrites[n].check(t, 
                                                    previous_t, 
-                                                   previous_speed, 
-                                                   previous_heading, 
                                                    speed, 
                                                    heading)
                 dendritic_activity.append(activity)
