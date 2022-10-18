@@ -37,3 +37,20 @@ def seeFiring(firing_history):
         firing.append(firing_history[t][2])
     plt.scatter(x_positions, y_positions, c=firing)
     plt.show()
+
+def seeOscillatorActivitySpatially(firing_history, oscillator_history):
+    x_positions = []
+    y_positions = []
+    oscillator_activity = []
+    for t in range(len(firing_history)):
+        x, y = firing_history[t][1]
+        x_positions.append(x)
+        y_positions.append(y)
+        oscillator_activity.append(oscillator_history[t])
+    plt.scatter(x_positions, y_positions, c=oscillator_activity)
+    plt.show()
+
+def seeOscillatorActivityTemporally(oscillator_history):
+    t = range(len(oscillator_history))
+    plt.plot(t, oscillator_history)
+    plt.show()
