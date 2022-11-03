@@ -54,8 +54,3 @@ def seeOscillatorActivityTemporally(oscillator_history):
     t = range(len(oscillator_history))
     plt.plot(t, oscillator_history)
     plt.show()
-
-def seeOscillatorActivityTemporally(oscillator_history):
-    t = range(len(oscillator_history))
-    plt.plot(t, oscillator_history)
-    plt.show()

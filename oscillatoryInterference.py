@@ -35,6 +35,7 @@ class Dendrite(Soma):
                       samples_per_second,
                       theta_frequency, 
                       phase_offset)
+        self.theta_angular_frequency = self.angular_frequency
         self.preferred_heading = preferred_heading
         self.scaling_parameter = scaling_parameter
         self.samples_per_second = samples_per_second
@@ -43,7 +44,9 @@ class Dendrite(Soma):
     def step(self,
              speed,
              heading):
-        self.angular_frequency += speed * self.scaling_parameter * math.cos(heading - self.preferred_heading)
+        self.angular_frequency = self.theta_angular_frequency +\
+            (speed * self.scaling_parameter *\
+                 math.cos(heading - self.preferred_heading))
         self.phase_step = self.angular_frequency / self.samples_per_second 
         self.phase += self.phase_step % (2 * math.pi)
         self.activity = math.cos(self.phase)
@@ -83,7 +86,7 @@ class GridCell:
             somatic_activity = self.soma.activity
             dendritic_activity = []
             for n in range(len(self.dendrites)): 
-                self.dendrites[n].step
+                self.dendrites[n].step(speed, heading)
                 activity = self.dendrites[n].activity
                 dendritic_activity.append(activity)
             membrane_potential = somatic_activity + np.prod(dendritic_activity)
