@@ -32,15 +32,59 @@ def generatePath(duration, arena_size):
     path = path[1:]
     return path
 
-def generateConstantPath(duration):
-    path = [[(0, 0), 0, 0]]
-    for iteration in range(duration):
-        position = (100 * iteration, 0)
-        heading = 0
-        speed = 100
+def generateConstantPath(start_position, 
+                         duration, 
+                         heading,
+                         speed, # in cm/sec
+                         samples_per_second):
+    position_change_per_sample = speed / samples_per_second
+    x_change_per_sample = position_change_per_sample * math.cos(heading)
+    y_change_per_sample = position_change_per_sample * math.sin(heading)
+    path = [[(start_position), 0, 0]]
+    for sample_number in range(math.floor(duration)):
+        x = start_position[0] + x_change_per_sample * sample_number
+        y = start_position[1] + y_change_per_sample * sample_number
+        position = (x, y)
         path.append([position, heading, speed])
     path = path[1:]
     return path
+
+# This test needs to be fed to the model in a "batched" way
+# Or have runs in a circular arena
+def generateQ1Test(speed, # in cm/sec
+                   samples_per_second,
+                   arena_size, 
+                   samples_per_wall):
+    spacing_factor = arena_size / samples_per_wall
+    path = []
+    destination = [0, arena_size]
+    while destination[0] < arena_size:
+        distance = math.dist((0,0), destination)
+        duration = (distance / speed) * samples_per_second
+        heading = math.pi / 2
+        if destination[0] != 0:
+            heading = math.atan(destination[1] / destination[0]) 
+            # (No need to adjust because we live in Q1)
+        segment = generateConstantPath((0, 0),
+                                       duration, 
+                                       heading,
+                                       speed, 
+                                       samples_per_second)
+        path.append(segment)
+        destination[0] += spacing_factor
+    while destination[1] > 0: 
+        distance = math.dist((0,0), destination)
+        duration = (distance / speed) * samples_per_second
+        heading = math.atan(destination[1] / destination[0]) 
+        segment = generateConstantPath((0, 0), # Account for heading
+                                       duration, 
+                                       heading,
+                                       speed, 
+                                       samples_per_second)
+        path.append(segment)
+        destination[1] += (-1 *  spacing_factor)
+    return path
+    
 
 def ratPath(file_name, sampling_rate): 
     sample_interval = 1 / sampling_rate
