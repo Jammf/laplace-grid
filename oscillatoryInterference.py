@@ -97,6 +97,7 @@ class GridCell:
                 activity = self.dendrites[n].activity
                 dendritic_activity.append(activity)
             membrane_potential = np.sum(np.multiply(somatic_activity, dendritic_activity))
+            # membrane_potential = np.prod(np.add(somatic_activity, dendritic_activity))
             firing_rate = membrane_potential
             # Heaviside function
             if firing_rate < 0:
