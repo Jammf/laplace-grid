@@ -53,8 +53,8 @@ def generateConstantPath(start_position,
 # Or have runs in a circular arena
 def generateQ1Test(speed, # in cm/sec
                    samples_per_second,
-                   arena_size, 
-                   samples_per_wall):
+                   arena_size):
+    samples_per_wall = (arena_size / speed * samples_per_second)
     spacing_factor = arena_size / samples_per_wall
     path = []
     destination = [0, arena_size]
@@ -86,7 +86,7 @@ def generateQ1Test(speed, # in cm/sec
     return path
     
 
-def ratPath(file_name, sampling_rate): 
+def getPath(file_name, sampling_rate): 
     sample_interval = 1 / sampling_rate
     path = [] # (Coordinates), heading, speed
     with open(file_name, newline = '') as file: 
@@ -117,7 +117,7 @@ def ratPath(file_name, sampling_rate):
     path = path[1:] # Remove the first observation because we don't know the heading
     return path
 
-def test_ratPath(file_name, path):
+def test_getPath(file_name, path):
     with open(file_name, 'w') as file: 
         writer = csv.writer(file)
         for datum in path: 

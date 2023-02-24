@@ -1,8 +1,0 @@
-In the OIM paper, the model is specified as an addition of each DO to the SO, 
-then a multiplication of all such sums. BUT --- is it possible to get 
-grid patterns the other way around, first mutiplying each DO by the SO, then 
-adding all such products? See lines 99 and 100 in oscillatoryInterference.py.
-
-"three_dendrites_A_then_M.png" vs. "three_dendrites_M_then_A.png"
- - path = PT.generateQ1Test(30, 50, 78, 100)
- - cell = OI.GridCell(50, 10, 0, 0.05 * math.pi * 2, 3, [0, math.pi / 3, 2 * math.pi / 3], [0, 0, 0])
