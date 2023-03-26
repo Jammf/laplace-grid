@@ -243,7 +243,7 @@ class GridCell:
 
         # Default offset between preferred directions corresponds to even spacing
         preferred_heading = torch.arange(0, n_dendritic)
-        self.dendritic_preferred_headings = preferred_heading + orientation * math.pi / 3
+        self.dendritic_preferred_headings = preferred_heading * (math.pi / 3) + orientation
 
         self.dendrite = Dendrite(samples_per_second, theta_frequency, self.scaling_parameter)
 
