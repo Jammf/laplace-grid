@@ -36,20 +36,19 @@ if __name__ == '__main__':
     positions_np = np.array(positions_np)
     firing_np = np.array(firing_np)
 
-    # print(f"gc_np elapsed time: {time.time() - start:.5f} seconds")
-    # print(f"numpy firing: {firing_np.shape}")
-    # print(f"numpy positions: {positions_np.shape}")
-    # print()
+    print(f"gc_np elapsed time: {time.time() - start:.5f} seconds")
+    print(f"numpy firing: {firing_np.shape}")
+    print(f"numpy positions: {positions_np.shape}")
+    print()
 
     # Torch version
-    gc_torch = GridCellTorch(**model_params, offset_proportions=(0.7, 0.2))
+    gc_torch = GridCellTorch(**model_params, offset_proportions=(0.0, 0.0))
     start = time.time()
     with torch.no_grad():
         firing_torch = gc_torch.batch_record(path)
     positions_torch = gc_torch.positions
 
     firing_voronoi(positions_torch.numpy(), firing_torch.numpy(), "torch")
-    exit()
 
     print(f"gc_torch elapsed time: {time.time() - start:.5f} seconds")
     print(f"torch firing: {firing_torch.numpy().shape}")
