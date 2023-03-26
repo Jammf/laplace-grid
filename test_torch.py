@@ -17,17 +17,16 @@ if __name__ == '__main__':
         arena_size=40
     )
 
-    model_params = {
-        "samples_per_second": 50.0,
-        "theta_frequency": 9.0,
-        "somatic_phase_offset": 0.0,
-        "cm_per_cycle": 10.0,
-        "n_dendritic": 6,
-        "orientation": 0.0,
-    }
-
     # Numpy version
-    gc_np = GridCell(**model_params, offset_proportion=1.0)
+    gc_np = GridCell(
+        samples_per_second=50.0,
+        theta_frequency=9.0,
+        somatic_phase_offset=0.0,
+        cm_per_cycle=10.0,
+        n_dendritic=6,
+        offset_proportion=0.0,
+        orientation=0.0,
+    )
     start = time.time()
     gc_np.test(path)
 
@@ -42,13 +41,25 @@ if __name__ == '__main__':
     print()
 
     # Torch version
-    gc_torch = GridCellTorch(**model_params, offset_proportions=(0.0, 0.0))
+    gc_torch = GridCellTorch(
+        samples_per_second=50.0,
+        theta_frequency=9.0,
+        somatic_phase_offset=torch.tensor([0.0, 0.1, 0.2]),
+        cm_per_cycle=torch.tensor([10.0, 20.0, 30.0]),
+        n_dendritic=6,
+        offset_proportions=torch.tensor([
+            [0.0, 0.0],
+            [0.2, 0.2],
+            [0.4, 0.4]
+        ]),
+        orientation=torch.tensor([0.0, 0.2, 0.3])
+    )
     start = time.time()
     with torch.no_grad():
         firing_torch = gc_torch.batch_record(path)
     positions_torch = gc_torch.positions
 
-    firing_voronoi(positions_torch.numpy(), firing_torch.numpy(), "torch")
+    firing_torch = firing_torch[:, 0]  # extract first cell
 
     print(f"gc_torch elapsed time: {time.time() - start:.5f} seconds")
     print(f"torch firing: {firing_torch.numpy().shape}")

@@ -133,20 +133,19 @@ class Dendrite(Soma):
     """
     def __init__(self,
                  samples_per_second: float,
-                 theta_frequency: float,
-                 scaling_parameter: float):
+                 theta_frequency: float):
         super().__init__(samples_per_second, theta_frequency)
         self.theta_angular_frequency = theta_frequency * 2 * math.pi
-        self.scaling_parameter = scaling_parameter
         self.samples_per_second = samples_per_second
 
     def forward(self,
              speed,
              heading,
              phase,
-             preferred_heading):
+             preferred_heading,
+             scaling_parameter):
         angular_frequency = self.theta_angular_frequency + \
-                            (speed * self.scaling_parameter *
+                            (speed * scaling_parameter *
                              torch.cos(heading - preferred_heading))
         phase_step = angular_frequency / self.samples_per_second
         phase = (phase + phase_step) % (2 * math.pi)
@@ -169,47 +168,69 @@ class GridCell:
     - theta_frequency: float (Hertz); the number of cycles per second 
         characteristic of the sub-threshold "theta" oscillation. According to 
         the paper, MEC Layer II cells show such oscillations at 8-9 Hz. 
-    - somatic_phase_offset: float (radians); the point in the somatic 
-        oscillator's cycle from which we wish its oscillation to begin at 
-        initialization
-    - cm_per_cycle: float (centimeters); the number of centimeters desired 
-        between firing fields
+    - somatic_phase_offsets: Tensor[float, "n_grid_cells"] (radians); the point
+        in the somatic oscillator's cycle from which we wish its oscillation to
+        begin at initialization
+    - cm_per_cycle: Tensor[float, "n_grid_cells"] (centimeters); the number of
+        centimeters desired between firing fields
     - n_dendritic: int between 1 and 6, inclusive; the number of dendritic
         oscillators desired
-    - offset_proportions: pair of floats between 0 and 1; how far through one
-        cycle of the grid pattern we want the cell's firing field shifted, with
-        respect to baseline
-    - orientation: float (radians) between 0 and Pi / 3; how much we want the 
-        grid pattern rotated, with respect to baseline
+    - offset_proportions: Tensor[float, "n_grid_cells 2"] between 0 and 1; how far
+        through one cycle of the grid pattern we want the cell's firing field
+        shifted, with respect to baseline
+    - orientation: Tensor[float, "n_grid_cells"] (radians) between 0 and Pi / 3;
+        how much we want the grid pattern rotated, with respect to baseline
 
     ATTRIBUTES:
-    - .scaling_parameter: float (radians per centimeter) the number of radians 
-        through the cycle of the interference pattern (made by the summation 
-        of the dendritic oscillator's activity with that of the somatic 
-        oscillator) traveled per each centimeter of space that the simulated 
+    - .scaling_parameter: Tensor[float, "n_grid_cells"] (radians per centimeter)
+        the number of radians through the cycle of the interference pattern (made
+        by the summation of the dendritic oscillator's activity with that of the
+        somatic oscillator) traveled per each centimeter of space that the simulated
         animal traverses
-    - .firing_history: list; a record of where the simulated animal has been 
-        and what the simulated cell's firing rate was there. The entries are 
-        lists of the form [sample number, [position x-coordinate, 
-        position y-coordinate], firing rate]
-    - .soma: instance of class Soma; the simulated grid cell's somatic 
-        oscillator
-    - .dendrites: list containing instances of class Dendrite; the simulated 
-        grid cell's dendritic oscillators 
+    - .firing_history: Tensor[float, "n_positions n_grid_cells"]; a record of
+        simulated cell's firing rate.
+    - .soma_phase_history: Tensor[float, "n_positions n_grid_cells"]; a record
+        of the phase of each simulated cell's somatic oscillator.
+    - .soma_activity_history: Tensor[float, "n_positions n_grid_cells n_dendrites"];
+        a record of the membrane potential of each simulated cell's somatic oscillator.
+    - .dendrite_phase_histories: Tensor[float, "n_positions n_grid_cells n_dendrites"];
+        a record of the phase of each simulated cell's dendritic oscillators.
+    - .dendrite_activity_histories: Tensor[float, "n_positions n_grid_cells"]; a record
+        of the membrane potential of each simulated cell's dendritic oscillators.
+    - .positions: Tensor[float, "n_positions 2"]; a record of the simulated animal's
+        position at each time step.
 
     METHODS:
+    - .step(somatic_phase, dendritic_phases, speed, heading): advance the state
+        of the grid cell by one time step of length determined by the
+        samples_per_second parameter.
+        ARGUMENTS:
+        - somatic_phase: Tensor[float, "n_grid_cells"] (radians); the state of
+            the oscillator as position in a cycle of 2-pi radians.
+        - dendritic_phases: Tensor[float, "n_grid_cells n_dendrites"] (radians);
+            the state of the oscillators as position in a cycle of 2-pi radians.
+        - speed: float (centimeters per second); the speed of the simulated animal.
+        - heading: float (radians); the direction of the simulated animal's motion.
+        RETURNS:
+        - firing_rate: Tensor[float, "n_grid_cells"]; the firing rate of the cell.
+        - somatic_phase: Tensor[float, "n_grid_cells"] (radians); the state
+            of the oscillator as position in a cycle of 2-pi radians.
+        - dendritic_phases: Tensor[float, "n_grid_cells n_dendrites"] (radians);
+            the state of the oscillators as position in a cycle of 2-pi radians.
+        - somatic_activity: Tensor[float, "n_grid_cells"]; the value of the
+            membrane potential as due to the oscillation.
+        - dendritic_activities: Tensor[float, "n_grid_cells n_dendrites"]; the
+            value of the membrane potential as due to the oscillation.
     - .record(path): simulate the activity of the grid cell as the simulated 
         animal runs a specific, unbroken, course
         ARGUMENTS:
         - path: list of lists of the form [[position x-coordinate, position 
             y-coordinate], heading, speed] representing the simulated animal's 
             trajectory through the environment; the path must be continuous
-    - .clear(): return all oscillators to their initial states and empty 
-        all histories
-    - .test(path): simulate the activity of the grid cell as the simulated 
-        animal runs a specific, potentially broken, course
+    - .batch_record(segments): simulate the activity of the grid cells as the
+        simulated animal runs a specific, potentially broken, course
         ARGUMENTS:
-        - path: list of list of lists of the form [[position x-coordinate, 
+        - segments: list of list of lists of the form [[position x-coordinate,
             position y-coordinate], heading, speed] representing the simulated 
             animal's trajectory through the environment; the path need not 
             be continuous, as each list of lists will be treated as its own 
@@ -217,35 +238,36 @@ class GridCell:
 
     """
     def __init__(self,
-                 samples_per_second,
-                 theta_frequency,
-                 somatic_phase_offset,
-                 cm_per_cycle,
-                 n_dendritic, # Natural number in [1, 6]
-                 offset_proportions: tuple[float, float], # Real number in [0, 1)
-                 orientation # Real number in [0, 1) correponding to [0, math.pi / 3)
+                 samples_per_second: float,
+                 theta_frequency: float,
+                 somatic_phase_offset: Tensor,
+                 cm_per_cycle: Tensor,
+                 n_dendritic: int, # Natural number in [1, 6]
+                 offset_proportions: Tensor, # Real number in [0, 1)
+                 orientation: Tensor # Real number in [0, 1) correponding to [0, math.pi / 3)
                  ):
         super().__init__()
         self.samples_per_second = samples_per_second
         self.theta_frequency = theta_frequency
 
-        self.somatic_phase_offset = torch.tensor(somatic_phase_offset)
+        self.somatic_phase_offset = somatic_phase_offset
         self.scaling_parameter = 2 * math.pi * (1 / cm_per_cycle)
 
         self.soma = Soma(samples_per_second,
                          theta_frequency)
 
-        a0, a60 = offset_proportions
+        a0, a60 = offset_proportions.T
         a120 = a60 - a0
-        dendritic_phase_offsets = torch.tensor([a0, a60, a120, 1-a0, 1-a60, 1-a120])
-        dendritic_phase_offsets = dendritic_phase_offsets[0:n_dendritic]
+        dendritic_phase_offsets = torch.stack([a0, a60, a120, 1-a0, 1-a60, 1-a120])
+        dendritic_phase_offsets = dendritic_phase_offsets[0:n_dendritic].T
         self.dendritic_phase_offsets = dendritic_phase_offsets * 2 * math.pi
 
         # Default offset between preferred directions corresponds to even spacing
-        preferred_heading = torch.arange(0, n_dendritic)
-        self.dendritic_preferred_headings = preferred_heading * (math.pi / 3) + orientation
+        heading_offset = math.pi / 3.0  # 60 degrees
+        preferred_heading = torch.arange(0, n_dendritic) * heading_offset
+        self.dendritic_preferred_headings = preferred_heading[None, :] + orientation[:, None]
 
-        self.dendrite = Dendrite(samples_per_second, theta_frequency, self.scaling_parameter)
+        self.dendrite = Dendrite(samples_per_second, theta_frequency)
 
     def step(self,
              somatic_phase: Tensor,
@@ -253,26 +275,43 @@ class GridCell:
              speed: Tensor,
              heading: Tensor
              ):
-        vmap_dendrite_step = vmap(
+        # update somatic states
+        somatic_phase, somatic_activity = vmap(self.soma)(somatic_phase)
+
+        # inner vmap - map over dendrites
+        vmap_dendrite = vmap(
             self.dendrite,
             in_dims=(
                 None,  # speed (broadcast)
                 None,  # heading (broadcast)
                 0,     # state_phase (map over dendrite dim)
-                0      # preferred_heading (map over dendrite dim)
+                0,     # preferred_heading (map over dendrite dim)
+                None,  # scaling_parameter (broadcast)
             )
         )
 
-        # update states
-        somatic_phase, somatic_activity = self.soma(somatic_phase)
-        dendritic_phases, dendritic_activities = vmap_dendrite_step(
-            speed,
-            heading,
-            dendritic_phases,
-            self.dendritic_preferred_headings
-        )  # vmap over dendrites
+        # outer vmap - map over grid cells
+        vmap_grid_cells = vmap(
+            vmap_dendrite,
+            in_dims=(
+                None,  # speed (broadcast)
+                None,  # heading (broadcast)
+                0,     # state_phase (map over grid cell dim)
+                0,     # preferred_heading (map over grid cell dim)
+                0,     # scaling_parameter (map over grid cell dim)
+            )
+        )
 
-        membrane_potential = torch.prod(somatic_activity + dendritic_activities)
+        # update dendritic states
+        dendritic_phases, dendritic_activities = vmap_grid_cells(
+            speed,                              # scalar
+            heading,                            # scalar
+            dendritic_phases,                   # (n_grid_cells, n_dendritic)
+            self.dendritic_preferred_headings,  # (n_grid_cells, n_dendritic)
+            self.scaling_parameter              # (n_grid_cells,)
+        )
+
+        membrane_potential = torch.prod(somatic_activity[:, None] + dendritic_activities, dim=-1)
         firing_rate = torch.relu(membrane_potential)
         return firing_rate, somatic_phase, dendritic_phases, somatic_activity, dendritic_activities
 
@@ -326,12 +365,13 @@ class GridCell:
 
         n_batch = len(segments)
 
-        # reset states
-        somatic_phase, _ = self.soma.reset(self.somatic_phase_offset)
-        batch_somatic_phase = somatic_phase.repeat(n_batch)  # repeat for each path segment
+        # reset somatic states - map over grid cells
+        somatic_phase, _ = vmap(self.soma.reset)(self.somatic_phase_offset)
+        batch_somatic_phase = somatic_phase.repeat(n_batch, 1)  # repeat for each path segment
 
-        dendritic_phases, _ = vmap(self.dendrite.reset)(self.dendritic_phase_offsets)
-        batch_dendritic_phases = dendritic_phases.repeat(n_batch, 1)  # repeat for each path segment
+        # reset dendritic states - map over grid cells and dendrites
+        dendritic_phases, _ = vmap(vmap(self.dendrite.reset))(self.dendritic_phase_offsets)
+        batch_dendritic_phases = dendritic_phases.repeat(n_batch, 1, 1)  # repeat for each path segment
 
         # record firing history
         batch_firing_history, \
@@ -344,7 +384,7 @@ class GridCell:
                 batch_speeds,
                 batch_somatic_phase,
                 batch_dendritic_phases
-            )
+            )  # vmap over segments
 
         # flatten segments and sequences
         firing_history = batch_firing_history.flatten(0, 1)
@@ -355,7 +395,7 @@ class GridCell:
         positions = batch_positions.flatten(0, 1)
 
         # remove nan padding
-        nan_ixs = torch.isnan(firing_history)
+        nan_ixs = torch.isnan(positions)[:, 0]
         firing_history = firing_history[~nan_ixs]
         soma_phase_history = soma_phase_history[~nan_ixs]
         soma_activity_history = soma_activity_history[~nan_ixs]
