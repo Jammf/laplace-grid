@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import math
+from scipy.spatial import Voronoi, voronoi_plot_2d
 
 def extractPath(path = None, firing_history = None):
     x_positions = []
@@ -37,6 +38,38 @@ def firing(firing_history):
         y_positions.append(y)
         firing.append(firing_history[t][2])
     plt.scatter(x_positions, y_positions, c=firing)
+    plt.show()
+
+def firing_voronoi(positions, firing, title=""):
+    """
+    Plot firing rate as voronoi regions.
+    """
+
+    # compute voronoi regions
+    vor = Voronoi(points=positions)
+
+    # plot voronoi regions without borders
+    voronoi_plot_2d(vor, show_vertices=False, show_points=False, line_width=0.0)
+
+    # map firing rate to colors
+    mapper = plt.cm.ScalarMappable(cmap=plt.cm.viridis)
+    colors = mapper.to_rgba(firing, norm=True)
+
+    # color voronoi region by firing rate
+    for point_region, color in zip(vor.point_region, colors):
+        # exclude regions with infinite vertices
+        if -1 not in vor.regions[point_region]:
+            polygon = [vor.vertices[i] for i in vor.regions[point_region]]  # get vertices of region
+            plt.fill(*zip(*polygon), facecolor=color, edgecolor=color, linewidth=0.1)
+
+    # set lims to position range
+    plt.xlim(positions[:, 0].min(), positions[:, 0].max())
+    plt.ylim(positions[:, 1].min(), positions[:, 1].max())
+
+    plt.title(title)
+    plt.gcf().set_dpi(300)
+    plt.gca().set_aspect('equal')
+    plt.gcf().set_constrained_layout(True)
     plt.show()
 
 def oscillatorActivitySpatially(firing_history, oscillator_history):
